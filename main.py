@@ -1,14 +1,24 @@
 import os
+import json
+import uuid
+import asyncio
 import urllib.parse
 from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, Request, HTTPException, status
-from fastapi.responses import HTMLResponse, FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, FileResponse, JSONResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, HttpUrl
 
-from downloader import get_video_details, download_video, is_valid_youtube_url
+from downloader import (
+    get_video_details, 
+    download_video, 
+    is_valid_youtube_url, 
+    init_download_task, 
+    get_task_status,
+    DOWNLOAD_TASKS
+)
 
 # Setup paths
 BASE_DIR = Path(__file__).resolve().parent
@@ -70,8 +80,8 @@ async def fetch_info(req: InfoRequest):
 @app.post("/api/download")
 async def start_download(req: DownloadRequest):
     """
-    Memulai proses pengunduhan video/audio berdasarkan format yang dipilih.
-    Menyimpan file ke folder 'downloads/' dan mengembalikan link download langsung.
+    Memulai proses pengunduhan video/audio di background dan mengembalikan task_id
+    agar progress real-time dapat dipantau dari antarmuka pengguna.
     """
     clean_url = req.url.strip()
     format_id = req.format_id.strip()
@@ -82,29 +92,76 @@ async def start_download(req: DownloadRequest):
             detail="URL YouTube tidak valid."
         )
 
-    try:
-        result = await download_video(
-            url=clean_url,
-            format_id=format_id,
-            download_dir=str(DOWNLOADS_DIR)
-        )
+    task_id = uuid.uuid4().hex[:12]
+    init_download_task(task_id, clean_url)
 
-        encoded_filename = urllib.parse.quote(result["filename"])
-        file_download_url = f"/api/file/{encoded_filename}"
+    async def run_download_job():
+        try:
+            result = await download_video(
+                url=clean_url,
+                format_id=format_id,
+                download_dir=str(DOWNLOADS_DIR),
+                task_id=task_id
+            )
+            encoded_filename = urllib.parse.quote(result["filename"])
+            if task_id in DOWNLOAD_TASKS:
+                DOWNLOAD_TASKS[task_id]["download_url"] = f"/api/file/{encoded_filename}"
+        except Exception as e:
+            if task_id in DOWNLOAD_TASKS:
+                DOWNLOAD_TASKS[task_id].update({
+                    "status": "error",
+                    "error": str(e),
+                    "message": f"Gagal mengunduh: {str(e)}"
+                })
 
-        return JSONResponse(content={
-            "success": True,
-            "message": "Pengunduhan berhasil diselesaikan!",
-            "filename": result["filename"],
-            "filesize_mb": result["filesize_mb"],
-            "download_url": file_download_url
-        })
+    asyncio.create_task(run_download_job())
 
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Gagal mengunduh video: {str(e)}"
-        )
+    return JSONResponse(content={
+        "success": True,
+        "task_id": task_id,
+        "message": "Pengunduhan telah dimulai."
+    })
+
+
+@app.get("/api/download/stream/{task_id}")
+async def stream_download_progress(task_id: str):
+    """
+    Server-Sent Events (SSE) endpoint untuk streaming progress pengunduhan secara real-time.
+    """
+    async def event_generator():
+        while True:
+            task = get_task_status(task_id)
+            if not task:
+                yield f"data: {json.dumps({'status': 'not_found'})}\n\n"
+                break
+
+            yield f"data: {json.dumps(task)}\n\n"
+
+            if task.get("status") in ("completed", "error"):
+                break
+
+            await asyncio.sleep(0.3)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
+
+
+@app.get("/api/download/status/{task_id}")
+async def get_download_status(task_id: str):
+    """
+    Polling fallback endpoint untuk memeriksa status pengunduhan.
+    """
+    task = get_task_status(task_id)
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task tidak ditemukan.")
+    return JSONResponse(content=task)
 
 
 @app.get("/api/file/{filename}")

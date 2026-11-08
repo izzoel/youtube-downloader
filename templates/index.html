@@ -167,6 +167,50 @@
       </div>
     </div>
 
+    <!-- Real-time Download Progress Card -->
+    <div id="progressCard" class="hidden bg-slate-900 border border-slate-800 rounded-2xl p-5 md:p-6 mb-8 shadow-xl">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-2.5">
+          <div class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
+          <div>
+            <span id="progressStatusText" class="text-xs font-semibold text-slate-200 block">Menghubungkan ke YouTube...</span>
+            <span class="text-[10px] text-slate-400">Sedang mengunduh berkas langsung dari server yt-dlp</span>
+          </div>
+        </div>
+        <div class="text-right">
+          <span id="progressPercent" class="text-lg font-bold font-mono text-red-400">0%</span>
+        </div>
+      </div>
+
+      <!-- Animated Progress Bar -->
+      <div class="w-full bg-slate-950 rounded-full h-3.5 p-0.5 border border-slate-800/80 overflow-hidden mb-3.5">
+        <div 
+          id="progressBar" 
+          class="bg-gradient-to-r from-red-600 via-rose-500 to-amber-500 h-full rounded-full transition-all duration-300 ease-out shadow-lg shadow-red-500/30" 
+          style="width: 0%"
+        ></div>
+      </div>
+
+      <!-- Real-time Metrics (Speed, ETA, Downloaded) -->
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-2 border-t border-slate-800/60 text-xs text-slate-400 font-mono">
+        <div class="flex items-center gap-1.5">
+          <svg class="w-4 h-4 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          <span id="progressSpeed" class="text-slate-200">-- MB/s</span>
+        </div>
+        <div class="flex items-center gap-1.5 justify-center sm:justify-start">
+          <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <span id="progressEta" class="text-slate-300">Sisa: --</span>
+        </div>
+        <div class="col-span-2 sm:col-span-1 flex items-center justify-end text-slate-400">
+          <span id="progressDownloaded">-- MB</span>
+        </div>
+      </div>
+    </div>
+
     <!-- Download Result / Success Card -->
     <div id="downloadResultBox" class="hidden bg-emerald-950/40 border border-emerald-500/40 rounded-2xl p-6 mb-8 text-center shadow-xl">
       <div class="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-3">
@@ -246,6 +290,15 @@
     const downloadResultBox = document.getElementById('downloadResultBox');
     const downloadsList = document.getElementById('downloadsList');
     const refreshHistoryBtn = document.getElementById('refreshHistoryBtn');
+
+    // Real-time Progress Bar Elements
+    const progressCard = document.getElementById('progressCard');
+    const progressBar = document.getElementById('progressBar');
+    const progressPercent = document.getElementById('progressPercent');
+    const progressSpeed = document.getElementById('progressSpeed');
+    const progressEta = document.getElementById('progressEta');
+    const progressDownloaded = document.getElementById('progressDownloaded');
+    const progressStatusText = document.getElementById('progressStatusText');
 
     // Paste from clipboard helper
     pasteBtn.addEventListener('click', async () => {

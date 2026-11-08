@@ -132,10 +132,81 @@ async def get_video_details(url: str) -> Dict[str, Any]:
     }
 
 
-def _download_ytdlp_task(url: str, format_spec: str, is_audio: bool, download_dir: str) -> dict:
-    """Proses download yt-dlp secara sinkronus di background thread."""
+# Global dictionary untuk melacak progress download yang sedang berlangsung
+DOWNLOAD_TASKS: Dict[str, Dict[str, Any]] = {}
+
+def get_task_status(task_id: str) -> Optional[Dict[str, Any]]:
+    """Mengambil status download saat ini berdasarkan task_id."""
+    return DOWNLOAD_TASKS.get(task_id)
+
+def init_download_task(task_id: str, url: str) -> Dict[str, Any]:
+    """Menginisialisasi task download baru."""
+    task = {
+        "task_id": task_id,
+        "url": url,
+        "status": "starting",
+        "percent": 0.0,
+        "speed": "--",
+        "eta": "--",
+        "downloaded_bytes": 0,
+        "total_bytes": 0,
+        "message": "Menghubungkan ke server YouTube...",
+        "filename": None,
+        "filesize_mb": 0.0,
+        "download_url": None,
+        "error": None
+    }
+    DOWNLOAD_TASKS[task_id] = task
+    return task
+
+def _download_ytdlp_task(url: str, format_spec: str, is_audio: bool, download_dir: str, task_id: Optional[str] = None) -> dict:
+    """Proses download yt-dlp secara sinkronus di background thread dengan progress tracking."""
     os.makedirs(download_dir, exist_ok=True)
     outtmpl = os.path.join(download_dir, "%(title).120B [%(id)s].%(ext)s")
+
+    def progress_hook(d):
+        if not task_id or task_id not in DOWNLOAD_TASKS:
+            return
+        status = d.get("status")
+        if status == "downloading":
+            total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
+            downloaded = d.get("downloaded_bytes") or 0
+
+            percent = 0.0
+            if total > 0:
+                percent = round((downloaded / total) * 100, 1)
+            else:
+                frag_index = d.get("fragment_index")
+                frag_count = d.get("fragment_count")
+                if frag_index and frag_count:
+                    percent = round((frag_index / frag_count) * 100, 1)
+                else:
+                    percent_str = re.sub(r"[^\d.]", "", d.get("_percent_str", "0"))
+                    try:
+                        percent = float(percent_str) if percent_str else 0.0
+                    except ValueError:
+                        percent = 0.0
+
+            speed = (d.get("_speed_str") or "--").strip()
+            eta = (d.get("_eta_str") or "--").strip()
+
+            DOWNLOAD_TASKS[task_id].update({
+                "status": "downloading",
+                "percent": min(percent, 98.0),
+                "speed": speed,
+                "eta": eta,
+                "downloaded_bytes": downloaded,
+                "total_bytes": total,
+                "message": f"Mengunduh stream... {percent}% ({speed})"
+            })
+        elif status == "finished":
+            DOWNLOAD_TASKS[task_id].update({
+                "status": "processing",
+                "percent": 99.0,
+                "speed": "--",
+                "eta": "--",
+                "message": "Menggabungkan video & audio..."
+            })
 
     opts = get_base_ydl_opts()
     opts.update({
@@ -144,6 +215,7 @@ def _download_ytdlp_task(url: str, format_spec: str, is_audio: bool, download_di
         "merge_output_format": "mp4" if not is_audio else None,
         "retries": 5,
         "fragment_retries": 5,
+        "progress_hooks": [progress_hook],
     })
 
     if is_audio:
@@ -172,22 +244,37 @@ def _download_ytdlp_task(url: str, format_spec: str, is_audio: bool, download_di
                     break
 
         filesize = os.path.getsize(filename) if os.path.exists(filename) else 0
-        print(f"[yt-dlp] Selesai diunduh: {os.path.basename(filename)} ({round(filesize / (1024 * 1024), 2)} MB)\n")
+        safe_name = os.path.basename(filename)
+        filesize_mb = round(filesize / (1024 * 1024), 2)
+        print(f"[yt-dlp] Selesai diunduh: {safe_name} ({filesize_mb} MB)\n")
 
-        return {
+        res_dict = {
             "success": True,
-            "filename": os.path.basename(filename),
+            "filename": safe_name,
             "full_path": filename,
-            "filesize_mb": round(filesize / (1024 * 1024), 2),
+            "filesize_mb": filesize_mb,
             "title": result.get("title", "Video")
         }
 
+        if task_id and task_id in DOWNLOAD_TASKS:
+            DOWNLOAD_TASKS[task_id].update({
+                "status": "completed",
+                "percent": 100.0,
+                "message": "Unduhan selesai!",
+                "filename": safe_name,
+                "filesize_mb": filesize_mb,
+            })
 
-async def download_video(url: str, format_id: str, download_dir: str) -> Dict[str, Any]:
+        return res_dict
+
+
+async def download_video(url: str, format_id: str, download_dir: str, task_id: Optional[str] = None) -> Dict[str, Any]:
     """
     Memulai download video YouTube secara non-blocking dengan format yang dipilih pengguna.
     """
     if not is_valid_youtube_url(url):
+        if task_id and task_id in DOWNLOAD_TASKS:
+            DOWNLOAD_TASKS[task_id].update({"status": "error", "error": "URL YouTube tidak valid."})
         raise ValueError("URL YouTube tidak valid.")
 
     is_audio = (format_id == "audio_mp3")
@@ -205,12 +292,21 @@ async def download_video(url: str, format_id: str, download_dir: str) -> Dict[st
     else:
         format_spec = "bestvideo+bestaudio/best"
 
-    download_result = await asyncio.to_thread(
-        _download_ytdlp_task,
-        url=url,
-        format_spec=format_spec,
-        is_audio=is_audio,
-        download_dir=download_dir
-    )
-
-    return download_result
+    try:
+        download_result = await asyncio.to_thread(
+            _download_ytdlp_task,
+            url=url,
+            format_spec=format_spec,
+            is_audio=is_audio,
+            download_dir=download_dir,
+            task_id=task_id
+        )
+        return download_result
+    except Exception as e:
+        if task_id and task_id in DOWNLOAD_TASKS:
+            DOWNLOAD_TASKS[task_id].update({
+                "status": "error",
+                "error": str(e),
+                "message": f"Gagal mengunduh: {str(e)}"
+            })
+        raise e
