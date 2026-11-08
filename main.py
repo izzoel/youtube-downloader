@@ -36,9 +36,10 @@ class DownloadRequest(BaseModel):
 
 
 @app.get("/", response_class=HTMLResponse)
+@app.get("/index.html", response_class=HTMLResponse)
 async def index_page(request: Request):
     """Menampilkan halaman utama UI Downloader."""
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="index.html")
 
 
 @app.post("/api/info")
