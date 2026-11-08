@@ -28,7 +28,7 @@
         <div>
           <h1 class="font-bold text-lg leading-tight tracking-tight text-white flex items-center gap-2">
             YT Downloader
-            <span class="text-xs px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 font-semibold">FastAPI + Playwright</span>
+            <span class="text-xs px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 font-semibold">FastAPI + yt-dlp</span>
           </h1>
           <p class="text-xs text-slate-400">Unduh video & audio YouTube kualitas tinggi dengan cepat</p>
         </div>
@@ -310,8 +310,8 @@
       submitBtn.disabled = true;
 
       showLoading(
-        'Menganalisis Halaman Video...', 
-        'Playwright sedang memverifikasi halaman YouTube dan yt-dlp sedang membaca resolusi yang tersedia.'
+        'Menganalisis Video...', 
+        'yt-dlp sedang membaca judul, thumbnail, dan opsi format yang tersedia.'
       );
 
       try {
