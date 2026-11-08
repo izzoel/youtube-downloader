@@ -15,6 +15,7 @@ from downloader import (
     get_video_details, 
     download_video, 
     is_valid_youtube_url, 
+    sanitize_youtube_url,
     init_download_task, 
     get_task_status,
     DOWNLOAD_TASKS
@@ -56,9 +57,9 @@ async def index_page(request: Request):
 async def fetch_info(req: InfoRequest):
     """
     Mengambil informasi video YouTube (judul, thumbnail, durasi, opsi kualitas)
-    menggunakan Playwright Async & yt-dlp.
+    menggunakan yt-dlp.
     """
-    clean_url = req.url.strip()
+    clean_url = sanitize_youtube_url(req.url.strip())
     if not is_valid_youtube_url(clean_url):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -83,7 +84,7 @@ async def start_download(req: DownloadRequest):
     Memulai proses pengunduhan video/audio di background dan mengembalikan task_id
     agar progress real-time dapat dipantau dari antarmuka pengguna.
     """
-    clean_url = req.url.strip()
+    clean_url = sanitize_youtube_url(req.url.strip())
     format_id = req.format_id.strip()
 
     if not is_valid_youtube_url(clean_url):

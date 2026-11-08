@@ -300,15 +300,53 @@
     const progressDownloaded = document.getElementById('progressDownloaded');
     const progressStatusText = document.getElementById('progressStatusText');
 
+    // Fungsi membersihkan URL YouTube dari parameter playlist, index, dll.
+    function cleanYoutubeUrl(rawUrl) {
+      if (!rawUrl) return '';
+      try {
+        const u = new URL(rawUrl.trim());
+        const host = u.hostname.toLowerCase();
+        if (host === 'youtu.be' || host === 'www.youtu.be') {
+          const vidId = u.pathname.replace(/^\/+/, '').split('/')[0];
+          if (vidId) return `https://youtu.be/${vidId}`;
+        }
+        if (host.includes('youtube.com')) {
+          if (u.pathname === '/watch') {
+            const v = u.searchParams.get('v');
+            if (v) return `https://www.youtube.com/watch?v=${v}`;
+          } else if (u.pathname.startsWith('/shorts/')) {
+            const vidId = u.pathname.split('/')[2];
+            if (vidId) return `https://www.youtube.com/shorts/${vidId}`;
+          } else if (u.pathname.startsWith('/embed/')) {
+            const vidId = u.pathname.split('/')[2];
+            if (vidId) return `https://www.youtube.com/embed/${vidId}`;
+          }
+        }
+      } catch (e) {
+        const youtuBeMatch = rawUrl.match(/youtu\.be\/([a-zA-Z0-9_-]+)/);
+        if (youtuBeMatch) return `https://youtu.be/${youtuBeMatch[1]}`;
+        const watchMatch = rawUrl.match(/[?&]v=([a-zA-Z0-9_-]+)/);
+        if (watchMatch) return `https://www.youtube.com/watch?v=${watchMatch[1]}`;
+      }
+      return rawUrl.trim();
+    }
+
     // Paste from clipboard helper
     pasteBtn.addEventListener('click', async () => {
       try {
         const text = await navigator.clipboard.readText();
-        videoUrlInput.value = text.trim();
-        showAlert('Tautan disalin dari clipboard!', 'info');
+        const cleaned = cleanYoutubeUrl(text);
+        videoUrlInput.value = cleaned;
+        showAlert('Tautan disalin dan parameter playlist/mix otomatis dibersihkan!', 'info');
       } catch (err) {
         showAlert('Tidak dapat mengakses clipboard. Silakan tempel secara manual.', 'warning');
       }
+    });
+
+    // Otomatis bersihkan saat input berubah
+    videoUrlInput.addEventListener('change', () => {
+      const cleaned = cleanYoutubeUrl(videoUrlInput.value);
+      if (cleaned) videoUrlInput.value = cleaned;
     });
 
     // Alert Notification
@@ -354,8 +392,11 @@
     // Submit URL untuk mengambil metadata video
     urlForm.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const url = videoUrlInput.value.trim();
-      if (!url) return;
+      const rawUrl = videoUrlInput.value.trim();
+      if (!rawUrl) return;
+
+      const url = cleanYoutubeUrl(rawUrl);
+      videoUrlInput.value = url;
 
       hideAlert();
       downloadResultBox.classList.add('hidden');

@@ -3,7 +3,7 @@ import re
 import asyncio
 from pathlib import Path
 from typing import Dict, Any, List, Optional
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
 import yt_dlp
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -11,6 +11,48 @@ DOWNLOADS_DIR = BASE_DIR / "downloads"
 COOKIES_FILE = BASE_DIR / "cookies.txt"
 
 DOWNLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def sanitize_youtube_url(url: str) -> str:
+    """
+    Membersihkan URL YouTube dari query parameter seperti list (playlist/mix),
+    index, t (timestamp), feature, dll., sehingga hanya menyisakan URL video murni.
+    Contoh:
+    https://youtu.be/fmyzTOtjKMw?list=RDfmyzTOtjKMw -> https://youtu.be/fmyzTOtjKMw
+    https://www.youtube.com/watch?v=fmyzTOtjKMw&list=RD... -> https://www.youtube.com/watch?v=fmyzTOtjKMw
+    """
+    if not url or not isinstance(url, str):
+        return ""
+
+    clean = url.strip()
+    parsed = urlparse(clean)
+    domain = parsed.netloc.lower()
+
+    # Format youtu.be/<video_id>
+    if domain in ("youtu.be", "www.youtu.be"):
+        video_id = parsed.path.strip("/")
+        if video_id:
+            video_id = video_id.split("/")[0]
+            return f"https://youtu.be/{video_id}"
+        return clean
+
+    # Format youtube.com/watch?v=<video_id>
+    if domain in ("www.youtube.com", "youtube.com", "m.youtube.com"):
+        if "/watch" in parsed.path:
+            qs = parse_qs(parsed.query)
+            v_list = qs.get("v")
+            if v_list and v_list[0]:
+                return f"https://www.youtube.com/watch?v={v_list[0]}"
+        elif "/shorts/" in parsed.path:
+            parts = parsed.path.strip("/").split("/")
+            if len(parts) >= 2:
+                return f"https://www.youtube.com/shorts/{parts[1]}"
+        elif "/embed/" in parsed.path:
+            parts = parsed.path.strip("/").split("/")
+            if len(parts) >= 2:
+                return f"https://www.youtube.com/embed/{parts[1]}"
+
+    return clean
 
 
 def format_duration(seconds: Optional[int]) -> str:
@@ -42,6 +84,7 @@ def get_base_ydl_opts() -> Dict[str, Any]:
     opts: Dict[str, Any] = {
         "quiet": True,
         "no_warnings": True,
+        "noplaylist": True,
     }
     if COOKIES_FILE.exists() and COOKIES_FILE.stat().st_size > 0:
         opts["cookiefile"] = str(COOKIES_FILE)
@@ -64,11 +107,12 @@ async def get_video_details(url: str) -> Dict[str, Any]:
     Mengambil informasi video YouTube (judul, thumbnail, durasi, opsi kualitas)
     menggunakan yt-dlp murni secara non-blocking.
     """
-    if not is_valid_youtube_url(url):
+    clean_url = sanitize_youtube_url(url)
+    if not is_valid_youtube_url(clean_url):
         raise ValueError("URL yang diberikan bukan tautan YouTube yang valid.")
 
-    print(f"\n[yt-dlp] Mengekstrak informasi video: {url}")
-    info = await asyncio.to_thread(_extract_ytdlp_info, url)
+    print(f"\n[yt-dlp] Mengekstrak informasi video: {clean_url}")
+    info = await asyncio.to_thread(_extract_ytdlp_info, clean_url)
     if not info:
         raise Exception("Gagal mengekstrak metadata dari video YouTube.")
 
@@ -272,7 +316,8 @@ async def download_video(url: str, format_id: str, download_dir: str, task_id: O
     """
     Memulai download video YouTube secara non-blocking dengan format yang dipilih pengguna.
     """
-    if not is_valid_youtube_url(url):
+    clean_url = sanitize_youtube_url(url)
+    if not is_valid_youtube_url(clean_url):
         if task_id and task_id in DOWNLOAD_TASKS:
             DOWNLOAD_TASKS[task_id].update({"status": "error", "error": "URL YouTube tidak valid."})
         raise ValueError("URL YouTube tidak valid.")
@@ -295,7 +340,7 @@ async def download_video(url: str, format_id: str, download_dir: str, task_id: O
     try:
         download_result = await asyncio.to_thread(
             _download_ytdlp_task,
-            url=url,
+            url=clean_url,
             format_spec=format_spec,
             is_audio=is_audio,
             download_dir=download_dir,
