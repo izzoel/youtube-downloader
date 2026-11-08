@@ -42,11 +42,15 @@ async def verify_youtube_with_playwright(url: str) -> Dict[str, Any]:
     3. Mengambil User-Agent dan cookies halaman bila ada bot-check atau consent popup.
     """
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
+        browser = await p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-setuid-sandbox"]
+        )
         context = await browser.new_context(
             user_agent=DEFAULT_USER_AGENT,
             viewport={"width": 1280, "height": 720},
-            locale="id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7"
+            locale="id-ID",
+            extra_http_headers={"Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7"}
         )
         page = await context.new_page()
 
