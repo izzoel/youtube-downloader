@@ -460,7 +460,7 @@
       previewCard.classList.remove('hidden');
     }
 
-    // Trigger Download Video
+    // Trigger Download Video dengan Progress Real-time
     downloadBtn.addEventListener('click', async () => {
       if (!currentVideoData || !selectedFormatId) {
         showAlert('Silakan pilih salah satu opsi format unduhan.', 'warning');
@@ -471,10 +471,14 @@
       downloadResultBox.classList.add('hidden');
       downloadBtn.disabled = true;
 
-      showLoading(
-        'Sedang Mengunduh & Memproses Video...',
-        'Server sedang mendownload stream audio/video dan menggabungkannya. Mohon tunggu...'
-      );
+      // Inisialisasi tampilan progress bar
+      progressCard.classList.remove('hidden');
+      progressBar.style.width = '0%';
+      progressPercent.textContent = '0%';
+      progressSpeed.textContent = '-- MB/s';
+      progressEta.textContent = 'Sisa: --';
+      progressDownloaded.textContent = '-- MB';
+      progressStatusText.textContent = 'Menghubungkan ke server YouTube...';
 
       try {
         const response = await fetch('/api/download', {
@@ -497,29 +501,121 @@
         }
 
         if (!response.ok) {
-          throw new Error(resData.detail || 'Proses unduh video gagal.');
+          throw new Error(resData.detail || 'Proses unduh video gagal dimulai.');
         }
 
-        // Tampilkan box sukses
-        document.getElementById('resultFileName').textContent = resData.filename;
-        document.getElementById('resultFileSize').textContent = `Ukuran: ${resData.filesize_mb} MB`;
-        const directLink = document.getElementById('directDownloadLink');
-        directLink.href = resData.download_url;
-        directLink.setAttribute('download', resData.filename);
+        const taskId = resData.task_id;
+        if (!taskId) {
+          throw new Error('Task ID pengunduhan tidak valid.');
+        }
 
-        downloadResultBox.classList.remove('hidden');
-        showAlert('Video berhasil diunduh ke server! Anda bisa mengunduhnya ke komputer sekarang.', 'success');
-
-        // Segarkan riwayat unduhan
-        loadDownloadsHistory();
+        // Mulai streaming progress secara real-time
+        await trackDownloadProgress(taskId);
 
       } catch (err) {
+        progressCard.classList.add('hidden');
         showAlert(err.message, 'error');
-      } finally {
-        hideLoading();
         downloadBtn.disabled = false;
       }
     });
+
+    // Fungsi pemantau progress download real-time (SSE + Polling Fallback)
+    function trackDownloadProgress(taskId) {
+      return new Promise((resolve, reject) => {
+        let isDone = false;
+        let eventSource = null;
+
+        const cleanup = () => {
+          if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+          }
+          downloadBtn.disabled = false;
+        };
+
+        const updateUI = (data) => {
+          const percent = Math.min(Math.max(data.percent || 0, 0), 100);
+          progressBar.style.width = `${percent}%`;
+          progressPercent.textContent = `${percent}%`;
+          progressSpeed.textContent = data.speed || '-- MB/s';
+          progressEta.textContent = `Sisa: ${data.eta || '--'}`;
+
+          if (data.downloaded_bytes && data.total_bytes && data.total_bytes > 0) {
+            const dlMb = (data.downloaded_bytes / (1024 * 1024)).toFixed(1);
+            const totMb = (data.total_bytes / (1024 * 1024)).toFixed(1);
+            progressDownloaded.textContent = `${dlMb} / ${totMb} MB`;
+          } else if (data.filesize_mb) {
+            progressDownloaded.textContent = `${data.filesize_mb} MB`;
+          }
+
+          if (data.message) {
+            progressStatusText.textContent = data.message;
+          }
+
+          if (data.status === 'completed') {
+            isDone = true;
+            cleanup();
+            progressCard.classList.add('hidden');
+
+            document.getElementById('resultFileName').textContent = data.filename || 'video.mp4';
+            document.getElementById('resultFileSize').textContent = `Ukuran: ${data.filesize_mb || 0} MB`;
+            const directLink = document.getElementById('directDownloadLink');
+            directLink.href = data.download_url || `/api/file/${encodeURIComponent(data.filename)}`;
+            directLink.setAttribute('download', data.filename || '');
+
+            downloadResultBox.classList.remove('hidden');
+            showAlert('Video berhasil diunduh ke server! Anda dapat mengunduhnya ke perangkat sekarang.', 'success');
+            loadDownloadsHistory();
+            resolve(data);
+          } else if (data.status === 'error') {
+            isDone = true;
+            cleanup();
+            progressCard.classList.add('hidden');
+            reject(new Error(data.error || data.message || 'Terjadi kesalahan saat mengunduh video.'));
+          }
+        };
+
+        // Hubungkan via Server-Sent Events (SSE)
+        try {
+          eventSource = new EventSource(`/api/download/stream/${taskId}`);
+          eventSource.onmessage = (event) => {
+            try {
+              const data = JSON.parse(event.data);
+              updateUI(data);
+            } catch (e) {
+              console.error('Error parsing SSE event data:', e);
+            }
+          };
+
+          eventSource.onerror = () => {
+            // Jika SSE terputus sebelum selesai, beralih ke polling berkala
+            if (!isDone) {
+              if (eventSource) eventSource.close();
+              pollProgress(taskId, updateUI, resolve, reject);
+            }
+          };
+        } catch (e) {
+          pollProgress(taskId, updateUI, resolve, reject);
+        }
+      });
+    }
+
+    // Polling fallback jika SSE tidak didukung atau terputus
+    function pollProgress(taskId, updateUI, resolve, reject) {
+      const interval = setInterval(async () => {
+        try {
+          const res = await fetch(`/api/download/status/${taskId}`);
+          if (!res.ok) return;
+          const data = await res.json();
+          updateUI(data);
+          if (data.status === 'completed' || data.status === 'error') {
+            clearInterval(interval);
+          }
+        } catch (err) {
+          // Retry otomatis pada interval berikutnya
+        }
+      }, 500);
+    }
 
     // Ambil daftar file unduhan yang tersimpan di server
     async function loadDownloadsHistory() {
