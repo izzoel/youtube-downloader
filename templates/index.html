@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YouTube Video & Audio Downloader - FastAPI</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased selection:bg-red-500 selection:text-white">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800/80 bg-slate-900/60 backdrop-blur-md sticky top-0 z-50">
+    <div class="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-red-600 to-rose-500 flex items-center justify-center shadow-lg shadow-red-500/20">
+          <svg class="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0-3.897.266-4.356 2.62-4.385 8.816.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0 3.897-.266 4.356-2.62 4.385-8.816-.029-6.185-.484-8.549-4.385-8.816zm-10.615 12.816v-8l8 3.993-8 4.007z"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="font-bold text-lg leading-tight tracking-tight text-white flex items-center gap-2">
+            YT Downloader
+            <span class="text-xs px-2 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 font-semibold">FastAPI + Playwright</span>
+          </h1>
+          <p class="text-xs text-slate-400">Unduh video & audio YouTube kualitas tinggi dengan cepat</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <a href="#history-section" class="text-xs px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-800/60 text-slate-300 hover:bg-slate-700/80 transition-all flex items-center gap-1.5">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          Riwayat File
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="max-w-4xl w-full mx-auto px-4 py-8 flex-1">
+    
+    <!-- Hero & Input Box -->
+    <div class="text-center mb-8">
+      <h2 class="text-3xl md:text-4xl font-extrabold tracking-tight text-white mb-2">
+        Download Video & Musik <span class="text-transparent bg-clip-text bg-gradient-to-r from-red-500 via-rose-500 to-amber-500">YouTube</span>
+      </h2>
+      <p class="text-slate-400 text-sm max-w-xl mx-auto">
+        Masukkan link video atau shorts YouTube di bawah. Sistem akan mengekstrak opsi resolusi video dan audio secara otomatis.
+      </p>
+    </div>
+
+    <!-- Input Form -->
+    <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-3 md:p-4 shadow-xl mb-8">
+      <form id="urlForm" class="flex flex-col sm:flex-row gap-2.5">
+        <div class="relative flex-1">
+          <div class="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-500">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+            </svg>
+          </div>
+          <input 
+            type="url" 
+            id="videoUrl" 
+            placeholder="Tempel tautan YouTube di sini (cth: https://www.youtube.com/watch?v=...)"
+            required
+            class="w-full bg-slate-950/80 border border-slate-700/80 rounded-xl pl-11 pr-24 py-3.5 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-red-500 transition-all"
+          />
+          <button 
+            type="button" 
+            id="pasteBtn"
+            class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-2.5 py-1.5 rounded-lg border border-slate-700 transition-all flex items-center gap-1"
+          >
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+            </svg>
+            Paste
+          </button>
+        </div>
+        <button 
+          type="submit" 
+          id="submitBtn"
+          class="bg-gradient-to-r from-red-600 to-rose-600 hover:from-red-500 hover:to-rose-500 text-white font-semibold text-sm px-6 py-3.5 rounded-xl shadow-lg shadow-red-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <span>Periksa Video</span>
+        </button>
+      </form>
+    </div>
+
+    <!-- Alert / Message Box -->
+    <div id="alertBox" class="hidden mb-6 p-4 rounded-xl text-sm border flex items-start gap-3 transition-all">
+      <div id="alertIcon" class="mt-0.5"></div>
+      <div id="alertText" class="flex-1 font-medium"></div>
+    </div>
+
+    <!-- Loading State -->
+    <div id="loadingBox" class="hidden bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center mb-8 shadow-xl">
+      <div class="inline-block relative w-12 h-12 mb-3">
+        <div class="w-12 h-12 rounded-full border-4 border-red-500/20 border-t-red-500 animate-spin"></div>
+      </div>
+      <h3 class="text-base font-semibold text-white mb-1" id="loadingTitle">Memproses...</h3>
+      <p class="text-xs text-slate-400" id="loadingSubtitle">Menghubungkan ke Playwright & yt-dlp...</p>
+    </div>
+
+    <!-- Video Preview & Option Details -->
+    <div id="previewCard" class="hidden bg-slate-900 border border-slate-800 rounded-2xl p-5 md:p-6 mb-8 shadow-xl">
+      <div class="flex flex-col md:flex-row gap-6">
+        <!-- Thumbnail -->
+        <div class="md:w-5/12 flex-shrink-0">
+          <div class="relative rounded-xl overflow-hidden aspect-video bg-slate-950 border border-slate-800 shadow-md">
+            <img id="videoThumb" src="" alt="Thumbnail" class="w-full h-full object-cover" />
+            <span id="videoDuration" class="absolute bottom-2 right-2 bg-black/80 text-white font-mono text-xs px-2 py-0.5 rounded font-semibold backdrop-blur-sm">
+              00:00
+            </span>
+          </div>
+        </div>
+
+        <!-- Info & Formats -->
+        <div class="md:w-7/12 flex flex-col justify-between">
+          <div>
+            <h3 id="videoTitle" class="text-lg font-bold text-white leading-snug mb-2 line-clamp-2">
+              Judul Video
+            </h3>
+            <div class="flex flex-wrap items-center gap-3 text-xs text-slate-400 mb-4">
+              <span id="videoChannel" class="flex items-center gap-1 font-medium text-slate-300">
+                <svg class="w-3.5 h-3.5 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clip-rule="evenodd" />
+                </svg>
+                Nama Channel
+              </span>
+              <span>•</span>
+              <span id="videoViews" class="text-slate-400">0 views</span>
+            </div>
+
+            <!-- Pilih Format / Kualitas -->
+            <label class="block text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2">
+              Pilih Kualitas / Format:
+            </label>
+            <div id="formatOptions" class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-5">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+
+          <!-- Download Action Button -->
+          <div>
+            <button 
+              id="downloadBtn" 
+              class="w-full bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-500 hover:to-rose-500 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg shadow-red-600/25 transition-all flex items-center justify-center gap-2 text-sm"
+            >
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              <span>Download File Sekarang</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Download Result / Success Card -->
+    <div id="downloadResultBox" class="hidden bg-emerald-950/40 border border-emerald-500/40 rounded-2xl p-6 mb-8 text-center shadow-xl">
+      <div class="w-12 h-12 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto mb-3">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+        </svg>
+      </div>
+      <h3 class="text-lg font-bold text-white mb-1">Unduhan Berhasil Disiapkan!</h3>
+      <p id="resultFileName" class="text-xs text-slate-300 font-mono mb-1 truncate px-4">filename.mp4</p>
+      <p id="resultFileSize" class="text-xs text-emerald-400 font-semibold mb-4">Ukuran: 0 MB</p>
+      <div class="flex flex-col sm:flex-row justify-center gap-3">
+        <a 
+          id="directDownloadLink" 
+          href="#" 
+          download 
+          class="bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm px-6 py-3 rounded-xl shadow-lg shadow-emerald-600/30 transition-all flex items-center justify-center gap-2"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+          </svg>
+          Simpan File ke Perangkat
+        </a>
+      </div>
+    </div>
+
+    <!-- Download History Section -->
+    <div id="history-section" class="bg-slate-900 border border-slate-800 rounded-2xl p-5 md:p-6 shadow-xl">
+      <div class="flex items-center justify-between mb-4 border-b border-slate-800 pb-3">
+        <h3 class="font-bold text-white text-base flex items-center gap-2">
+          <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4" />
+          </svg>
+          File yang Sudah Diunduh di Server
+        </h3>
+        <button 
+          id="refreshHistoryBtn" 
+          class="text-xs text-slate-400 hover:text-white px-2.5 py-1.5 rounded-lg bg-slate-800 border border-slate-700 transition-all flex items-center gap-1"
+        >
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Segarkan
+        </button>
+      </div>
+
+      <div id="downloadsList" class="divide-y divide-slate-800/60 text-sm">
+        <div class="text-center py-6 text-slate-500 text-xs">Memuat daftar file...</div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Footer -->
+  <footer class="border-t border-slate-800/80 py-6 text-center text-xs text-slate-500 bg-slate-950">
+    <div class="max-w-4xl mx-auto px-4">
+      <p>YouTube Downloader • Didukung oleh FastAPI, Playwright Headless & yt-dlp</p>
+    </div>
+  </footer>
+
+  <!-- JavaScript App Logic -->
+  <script>
+    let currentVideoData = null;
+    let selectedFormatId = null;
+
+    const urlForm = document.getElementById('urlForm');
+    const videoUrlInput = document.getElementById('videoUrl');
+    const pasteBtn = document.getElementById('pasteBtn');
+    const submitBtn = document.getElementById('submitBtn');
+    const alertBox = document.getElementById('alertBox');
+    const alertText = document.getElementById('alertText');
+    const alertIcon = document.getElementById('alertIcon');
+    const loadingBox = document.getElementById('loadingBox');
+    const loadingTitle = document.getElementById('loadingTitle');
+    const loadingSubtitle = document.getElementById('loadingSubtitle');
+    const previewCard = document.getElementById('previewCard');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const downloadResultBox = document.getElementById('downloadResultBox');
+    const downloadsList = document.getElementById('downloadsList');
+    const refreshHistoryBtn = document.getElementById('refreshHistoryBtn');
+
+    // Paste from clipboard helper
+    pasteBtn.addEventListener('click', async () => {
+      try {
+        const text = await navigator.clipboard.readText();
+        videoUrlInput.value = text.trim();
+        showAlert('Tautan disalin dari clipboard!', 'info');
+      } catch (err) {
+        showAlert('Tidak dapat mengakses clipboard. Silakan tempel secara manual.', 'warning');
+      }
+    });
+
+    // Alert Notification
+    function showAlert(message, type = 'error') {
+      alertBox.classList.remove('hidden', 'bg-red-950/40', 'border-red-500/40', 'text-red-200',
+        'bg-emerald-950/40', 'border-emerald-500/40', 'text-emerald-200',
+        'bg-amber-950/40', 'border-amber-500/40', 'text-amber-200',
+        'bg-sky-950/40', 'border-sky-500/40', 'text-sky-200');
+
+      let iconSvg = '';
+      if (type === 'error') {
+        alertBox.classList.add('bg-red-950/40', 'border-red-500/40', 'text-red-200');
+        iconSvg = `<svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
+      } else if (type === 'success') {
+        alertBox.classList.add('bg-emerald-950/40', 'border-emerald-500/40', 'text-emerald-200');
+        iconSvg = `<svg class="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>`;
+      } else if (type === 'warning') {
+        alertBox.classList.add('bg-amber-950/40', 'border-amber-500/40', 'text-amber-200');
+        iconSvg = `<svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>`;
+      } else {
+        alertBox.classList.add('bg-sky-950/40', 'border-sky-500/40', 'text-sky-200');
+        iconSvg = `<svg class="w-5 h-5 text-sky-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
+      }
+
+      alertIcon.innerHTML = iconSvg;
+      alertText.textContent = message;
+    }
+
+    function hideAlert() {
+      alertBox.classList.add('hidden');
+    }
+
+    function showLoading(title, subtitle) {
+      loadingTitle.textContent = title;
+      loadingSubtitle.textContent = subtitle;
+      loadingBox.classList.remove('hidden');
+    }
+
+    function hideLoading() {
+      loadingBox.classList.add('hidden');
+    }
+
+    // Submit URL untuk mengambil metadata video
+    urlForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const url = videoUrlInput.value.trim();
+      if (!url) return;
+
+      hideAlert();
+      downloadResultBox.classList.add('hidden');
+      previewCard.classList.add('hidden');
+      submitBtn.disabled = true;
+
+      showLoading(
+        'Menganalisis Halaman Video...', 
+        'Playwright sedang memverifikasi halaman YouTube dan yt-dlp sedang membaca resolusi yang tersedia.'
+      );
+
+      try {
+        const response = await fetch('/api/info', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: url })
+        });
+
+        const resData = await response.json();
+        if (!response.ok) {
+          throw new Error(resData.detail || 'Gagal mengekstrak data video.');
+        }
+
+        currentVideoData = resData.data;
+        renderVideoPreview(currentVideoData);
+
+      } catch (err) {
+        showAlert(err.message, 'error');
+      } finally {
+        hideLoading();
+        submitBtn.disabled = false;
+      }
+    });
+
+    // Render Preview Video & List Resolusi
+    function renderVideoPreview(data) {
+      document.getElementById('videoThumb').src = data.thumbnail || '';
+      document.getElementById('videoDuration').textContent = data.duration_formatted || '00:00';
+      document.getElementById('videoTitle').textContent = data.title;
+      document.getElementById('videoChannel').textContent = data.channel;
+      document.getElementById('videoViews').textContent = data.views ? `${Number(data.views).toLocaleString()} tayangan` : '';
+
+      const formatContainer = document.getElementById('formatOptions');
+      formatContainer.innerHTML = '';
+
+      if (!data.options || data.options.length === 0) {
+        formatContainer.innerHTML = '<p class="text-xs text-amber-400">Tidak ada format yang tersedia untuk diunduh.</p>';
+        return;
+      }
+
+      // Default pilih opsi pertama
+      selectedFormatId = data.options[0].id;
+
+      data.options.forEach((opt, idx) => {
+        const optButton = document.createElement('button');
+        optButton.type = 'button';
+        optButton.dataset.id = opt.id;
+        optButton.className = `format-card text-left p-3 rounded-xl border text-xs transition-all flex items-center justify-between ${
+          idx === 0 
+            ? 'border-red-500 bg-red-500/10 text-white font-semibold ring-1 ring-red-500' 
+            : 'border-slate-800 bg-slate-950/60 text-slate-300 hover:border-slate-700'
+        }`;
+
+        const isAudio = opt.type === 'audio';
+        optButton.innerHTML = `
+          <div class="flex items-center gap-2">
+            <span class="p-1.5 rounded-lg ${isAudio ? 'bg-amber-500/20 text-amber-400' : 'bg-red-500/20 text-red-400'}">
+              ${isAudio ? '🎵' : '🎬'}
+            </span>
+            <div>
+              <div class="font-medium text-slate-200">${opt.label}</div>
+              <div class="text-[10px] text-slate-500 uppercase tracking-wider">${opt.ext} • ${opt.resolution}</div>
+            </div>
+          </div>
+          <div class="selection-indicator ${idx === 0 ? 'text-red-400' : 'text-slate-600'}">
+            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+          </div>
+        `;
+
+        optButton.addEventListener('click', () => {
+          selectedFormatId = opt.id;
+          document.querySelectorAll('.format-card').forEach(b => {
+            b.className = 'format-card text-left p-3 rounded-xl border text-xs transition-all flex items-center justify-between border-slate-800 bg-slate-950/60 text-slate-300 hover:border-slate-700';
+            b.querySelector('.selection-indicator').className = 'selection-indicator text-slate-600';
+          });
+          optButton.className = 'format-card text-left p-3 rounded-xl border text-xs transition-all flex items-center justify-between border-red-500 bg-red-500/10 text-white font-semibold ring-1 ring-red-500';
+          optButton.querySelector('.selection-indicator').className = 'selection-indicator text-red-400';
+        });
+
+        formatContainer.appendChild(optButton);
+      });
+
+      previewCard.classList.remove('hidden');
+    }
+
+    // Trigger Download Video
+    downloadBtn.addEventListener('click', async () => {
+      if (!currentVideoData || !selectedFormatId) {
+        showAlert('Silakan pilih salah satu opsi format unduhan.', 'warning');
+        return;
+      }
+
+      hideAlert();
+      downloadResultBox.classList.add('hidden');
+      downloadBtn.disabled = true;
+
+      showLoading(
+        'Sedang Mengunduh & Memproses Video...',
+        'Server sedang mendownload stream audio/video dan menggabungkannya. Mohon tunggu...'
+      );
+
+      try {
+        const response = await fetch('/api/download', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: videoUrlInput.value.trim(),
+            format_id: selectedFormatId
+          })
+        });
+
+        const resData = await response.json();
+        if (!response.ok) {
+          throw new Error(resData.detail || 'Proses unduh video gagal.');
+        }
+
+        // Tampilkan box sukses
+        document.getElementById('resultFileName').textContent = resData.filename;
+        document.getElementById('resultFileSize').textContent = `Ukuran: ${resData.filesize_mb} MB`;
+        const directLink = document.getElementById('directDownloadLink');
+        directLink.href = resData.download_url;
+        directLink.setAttribute('download', resData.filename);
+
+        downloadResultBox.classList.remove('hidden');
+        showAlert('Video berhasil diunduh ke server! Anda bisa mengunduhnya ke komputer sekarang.', 'success');
+
+        // Segarkan riwayat unduhan
+        loadDownloadsHistory();
+
+      } catch (err) {
+        showAlert(err.message, 'error');
+      } finally {
+        hideLoading();
+        downloadBtn.disabled = false;
+      }
+    });
+
+    // Ambil daftar file unduhan yang tersimpan di server
+    async function loadDownloadsHistory() {
+      try {
+        const response = await fetch('/api/downloads');
+        const data = await response.json();
+        if (data.success && data.files) {
+          if (data.files.length === 0) {
+            downloadsList.innerHTML = '<div class="text-center py-6 text-slate-500 text-xs">Belum ada file yang diunduh.</div>';
+            return;
+          }
+
+          downloadsList.innerHTML = data.files.map(file => `
+            <div class="py-3 flex items-center justify-between gap-3">
+              <div class="min-w-0 flex-1">
+                <div class="font-medium text-slate-200 truncate text-xs sm:text-sm" title="${file.name}">
+                  ${file.name}
+                </div>
+                <div class="text-[11px] text-slate-500 mt-0.5">
+                  Ukuran: <span class="text-slate-400 font-mono">${file.size_mb} MB</span>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 flex-shrink-0">
+                <a 
+                  href="${file.download_url}" 
+                  download 
+                  class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-700 flex items-center gap-1 transition-all"
+                >
+                  <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                  </svg>
+                  Unduh
+                </a>
+                <button 
+                  onclick="deleteFile('${encodeURIComponent(file.name)}')" 
+                  class="bg-slate-800 hover:bg-red-500/20 text-slate-400 hover:text-red-400 p-1.5 rounded-lg border border-slate-700 hover:border-red-500/30 transition-all"
+                  title="Hapus file"
+                >
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                  </svg>
+                </button>
+              </div>
+            </div>
+          `).join('');
+        }
+      } catch (err) {
+        downloadsList.innerHTML = '<div class="text-center py-4 text-red-400 text-xs">Gagal memuat riwayat file.</div>';
+      }
+    }
+
+    // Fungsi hapus file
+    window.deleteFile = async function(encodedFilename) {
+      if (!confirm('Apakah Anda yakin ingin menghapus file ini dari server?')) return;
+      try {
+        const response = await fetch(`/api/file/${encodedFilename}`, { method: 'DELETE' });
+        const res = await response.json();
+        if (response.ok) {
+          showAlert(res.message, 'info');
+          loadDownloadsHistory();
+        } else {
+          showAlert(res.detail || 'Gagal menghapus file.', 'error');
+        }
+      } catch (err) {
+        showAlert(err.message, 'error');
+      }
+    };
+
+    refreshHistoryBtn.addEventListener('click', loadDownloadsHistory);
+
+    // Initial load history
+    loadDownloadsHistory();
+  </script>
+</body>
+</html>
