@@ -6,11 +6,43 @@ from urllib.parse import urlparse, parse_qs
 from playwright.async_api import async_playwright
 import yt_dlp
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+COOKIES_FILE = os.path.join(BASE_DIR, "cookies.txt")
+PLAYWRIGHT_COOKIES_FILE = os.path.join(BASE_DIR, "downloads", "cookies_playwright.txt")
+
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) "
     "Chrome/124.0.0.0 Safari/537.36"
 )
+
+def get_active_cookie_file() -> Optional[str]:
+    """Mengembalikan path cookiefile jika cookies.txt atau cookies_playwright.txt tersedia."""
+    if os.path.exists(COOKIES_FILE) and os.path.getsize(COOKIES_FILE) > 0:
+        return COOKIES_FILE
+    if os.path.exists(PLAYWRIGHT_COOKIES_FILE) and os.path.getsize(PLAYWRIGHT_COOKIES_FILE) > 0:
+        return PLAYWRIGHT_COOKIES_FILE
+    return None
+
+def save_playwright_cookies(cookies: list, filepath: str) -> None:
+    """Menyimpan cookies dari Playwright ke format Netscape cookies untuk digunakan yt-dlp."""
+    try:
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write("# Netscape HTTP Cookie File\n")
+            for c in cookies:
+                domain = c.get("domain", "")
+                flag = "TRUE" if domain.startswith(".") else "FALSE"
+                path = c.get("path", "/")
+                secure = "TRUE" if c.get("secure", False) else "FALSE"
+                expires = int(c.get("expires", -1))
+                if expires <= 0:
+                    expires = 2147483647
+                name = c.get("name", "")
+                value = c.get("value", "")
+                f.write(f"{domain}\t{flag}\t{path}\t{secure}\t{expires}\t{name}\t{value}\n")
+    except Exception as e:
+        print(f"Warning: Gagal menyimpan cookies Playwright: {e}")
 
 def format_duration(seconds: Optional[int]) -> str:
     """Mengubah durasi detik menjadi format HH:MM:SS atau MM:SS."""
@@ -97,15 +129,24 @@ async def verify_youtube_with_playwright(url: str) -> Dict[str, Any]:
             await browser.close()
 
 
-def _extract_ytdlp_info(url: str) -> dict:
+def _extract_ytdlp_info(url: str, cookie_file: Optional[str] = None) -> dict:
     """Fungsi pembantu sync untuk yt-dlp extract_info."""
-    ydl_opts = {
+    cookie = cookie_file or get_active_cookie_file()
+    ydl_opts: Dict[str, Any] = {
         "quiet": True,
         "no_warnings": True,
         "skip_download": True,
         "extract_flat": False,
         "user_agent": DEFAULT_USER_AGENT,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "ios", "mweb", "web"],
+            }
+        },
     }
+    if cookie:
+        ydl_opts["cookiefile"] = cookie
+
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         return ydl.extract_info(url, download=False)
 
@@ -113,19 +154,38 @@ def _extract_ytdlp_info(url: str) -> dict:
 async def get_video_details(url: str) -> Dict[str, Any]:
     """
     Kombinasi Playwright Async & yt-dlp:
-    1. Verifikasi Playwright untuk validasi akses & bot check.
-    2. Ekstraksi format dan metadata lengkap via yt-dlp (async non-blocking).
+    1. Coba ekstraksi cepat langsung via yt-dlp dengan client mobile/web bypass.
+    2. Jika dibatasi/gagal, jalankan Playwright untuk verifikasi status halaman & ambil session cookies.
     """
     if not is_valid_youtube_url(url):
         raise ValueError("URL yang diberikan bukan tautan YouTube yang valid.")
 
-    # 1. Jalankan Playwright verification
-    playwright_result = await verify_youtube_with_playwright(url)
-    if not playwright_result.get("valid"):
-        raise Exception("Gagal memverifikasi URL video di Playwright.")
+    info = None
+    last_error = None
 
-    # 2. Jalankan yt-dlp ekstraksi metadata di background thread
-    info = await asyncio.to_thread(_extract_ytdlp_info, url)
+    # 1. Coba ekstraksi cepat via yt-dlp
+    try:
+        info = await asyncio.to_thread(_extract_ytdlp_info, url)
+    except Exception as e:
+        last_error = e
+
+    # 2. Jika yt-dlp awal gagal, gunakan Playwright untuk bypass & ekstrak session cookies
+    if not info:
+        try:
+            playwright_result = await verify_youtube_with_playwright(url)
+            if playwright_result.get("cookies"):
+                save_playwright_cookies(playwright_result["cookies"], PLAYWRIGHT_COOKIES_FILE)
+            # Ulangi ekstraksi dengan cookies Playwright
+            info = await asyncio.to_thread(_extract_ytdlp_info, url, PLAYWRIGHT_COOKIES_FILE)
+        except Exception as pe:
+            err_msg = str(last_error) if last_error else str(pe)
+            if "not available" in err_msg.lower():
+                raise Exception(
+                    "Video tidak dapat diakses atau diblokir oleh YouTube untuk IP server ini. "
+                    "Solusi: Perbarui yt-dlp di server (`pip install -U yt-dlp`) atau letakkan file `cookies.txt` di folder project."
+                )
+            raise Exception(f"Gagal memeriksa video: {err_msg}")
+
     if not info:
         raise Exception("Gagal mengekstrak metadata dari video YouTube.")
 
@@ -172,7 +232,7 @@ async def get_video_details(url: str) -> Dict[str, Any]:
 
     return {
         "id": info.get("id"),
-        "title": info.get("title") or playwright_result.get("page_title") or "Video YouTube",
+        "title": info.get("title") or "Video YouTube",
         "duration": info.get("duration", 0),
         "duration_formatted": format_duration(info.get("duration")),
         "thumbnail": info.get("thumbnail"),
@@ -188,6 +248,7 @@ def _download_ytdlp_task(url: str, format_spec: str, is_audio: bool, download_di
 
     # Pola nama file yang bersih dan aman
     outtmpl = os.path.join(download_dir, "%(title).120B [%(id)s].%(ext)s")
+    cookie = get_active_cookie_file()
 
     ydl_opts: Dict[str, Any] = {
         "outtmpl": outtmpl,
@@ -198,7 +259,14 @@ def _download_ytdlp_task(url: str, format_spec: str, is_audio: bool, download_di
         "merge_output_format": "mp4" if not is_audio else None,
         "retries": 5,
         "fragment_retries": 5,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "ios", "mweb", "web"],
+            }
+        },
     }
+    if cookie:
+        ydl_opts["cookiefile"] = cookie
 
     if is_audio:
         ydl_opts["postprocessors"] = [{

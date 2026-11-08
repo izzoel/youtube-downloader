@@ -321,7 +321,16 @@
           body: JSON.stringify({ url: url })
         });
 
-        const resData = await response.json();
+        let resData;
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          resData = await response.json();
+        } else {
+          const rawText = await response.text();
+          const cleanText = rawText.replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
+          throw new Error(`Server (${response.status}): ${cleanText.slice(0, 150) || 'Respon server tidak valid.'}`);
+        }
+
         if (!response.ok) {
           throw new Error(resData.detail || 'Gagal mengekstrak data video.');
         }
@@ -424,7 +433,16 @@
           })
         });
 
-        const resData = await response.json();
+        let resData;
+        const contentType = response.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          resData = await response.json();
+        } else {
+          const rawText = await response.text();
+          const cleanText = rawText.replace(/<[^>]*>?/gm, ' ').replace(/\s+/g, ' ').trim();
+          throw new Error(`Server (${response.status}): ${cleanText.slice(0, 150) || 'Proses unduh gagal.'}`);
+        }
+
         if (!response.ok) {
           throw new Error(resData.detail || 'Proses unduh video gagal.');
         }
